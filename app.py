@@ -1,7 +1,10 @@
 import os
 import subprocess
-import imageio_ffmpeg
+import static_ffmpeg
 from flask import Flask, request, send_file, render_template_string
+
+# تجهيز محرك FFmpeg تلقائياً عند تشغيل السيرفر
+static_ffmpeg.add_paths()
 
 app = Flask(__name__)
 UPLOAD_FOLDER = "/tmp/uploads"
@@ -168,15 +171,13 @@ def process():
     out_path = os.path.join(PROCESSED_FOLDER, out_name)
     file.save(in_path)
 
-    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-
     cmd = [
-        ffmpeg_exe, "-y", "-i", in_path,
+        "ffmpeg", "-y", "-i", in_path,
         "-vf", "scale=1080:-2",
         "-r", "120",
         "-c:v", "libx264",
         "-crf", "23",
-        "-preset", "faster",
+        "-preset", "ultrafast",
         "-c:a", "copy",
         out_path
     ]
