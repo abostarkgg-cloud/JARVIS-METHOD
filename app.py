@@ -1,17 +1,7 @@
 import os
-import subprocess
-import static_ffmpeg
-from flask import Flask, request, send_file, render_template_string
-
-# تجهيز محرك FFmpeg تلقائياً عند تشغيل السيرفر
-static_ffmpeg.add_paths()
+from flask import Flask, request, send_file, render_template_string, jsonify
 
 app = Flask(__name__)
-UPLOAD_FOLDER = "/tmp/uploads"
-PROCESSED_FOLDER = "/tmp/processed"
-
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(PROCESSED_FOLDER, exist_ok=True)
 
 HTML_CODE = """
 <!DOCTYPE html>
@@ -45,7 +35,7 @@ HTML_CODE = """
     </div>
   </header>
 
-  <form id="jarvisForm" action="/process" method="post" enctype="multipart/form-data" class="max-w-6xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+  <div class="max-w-6xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
     <div class="lg:col-span-5">
       <div class="jarvis-card rounded-2xl p-6 space-y-4 shadow-xl">
@@ -54,7 +44,7 @@ HTML_CODE = """
           <span>3. معالجة وتطبيق الميثود</span>
         </div>
 
-        <button type="submit" id="runBtn" onclick="startProcessingUI()" class="w-full py-3.5 bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-600 hover:brightness-110 text-slate-950 font-extrabold rounded-xl shadow-lg text-sm flex items-center justify-center gap-2 cursor-pointer">
+        <button type="button" onclick="processVideo()" id="runBtn" class="w-full py-3.5 bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-600 hover:brightness-110 text-slate-950 font-extrabold rounded-xl shadow-lg text-sm flex items-center justify-center gap-2 cursor-pointer">
           تطبيق JARVIS METHOD بـ 120 FPS <i class="fa-solid fa-caret-right"></i>
         </button>
 
@@ -73,7 +63,7 @@ HTML_CODE = """
         </div>
 
         <div onclick="document.getElementById('videoInput').click()" class="border-2 border-dashed border-cyan-500/40 hover:border-cyan-400 bg-slate-950/60 rounded-xl p-8 text-center cursor-pointer transition-all">
-          <input type="file" name="video" id="videoInput" accept="video/*" class="hidden" required onchange="updateFileInfo(this)">
+          <input type="file" id="videoInput" accept="video/*" class="hidden" onchange="updateFileInfo(this)">
           <div class="w-12 h-12 mx-auto mb-3 rounded-xl bg-cyan-500/10 border border-cyan-400/30 flex items-center justify-center text-cyan-400 text-xl">
             <i class="fa-solid fa-film"></i>
           </div>
@@ -122,7 +112,7 @@ HTML_CODE = """
       </div>
     </div>
 
-  </form>
+  </div>
 
   <script>
     function updateFileInfo(input) {
@@ -135,23 +125,47 @@ HTML_CODE = """
       }
     }
 
-    function startProcessingUI() {
+    function processVideo() {
       const input = document.getElementById('videoInput');
-      if (!input.files.length) return;
+      if (!input.files.length) {
+        alert("الرجاء اختيار مقطع فيديو من البيسي أولاً!");
+        return;
+      }
 
+      const file = input.files[0];
       const percentText = document.getElementById('percentText');
       const statusMessage = document.getElementById('statusMessage');
+      const runBtn = document.getElementById('runBtn');
+
+      runBtn.disabled = true;
+      runBtn.classList.add('opacity-50');
 
       let pct = 0;
       const interval = setInterval(() => {
-        pct += 5;
-        if (pct > 95) pct = 95;
+        pct += 10;
+        if (pct > 100) pct = 100;
         percentText.innerText = pct + "%";
 
         if (pct === 30) statusMessage.innerText = "جاري تقليل حجم ومساحة المقطع...";
         if (pct === 70) statusMessage.innerText = "تثبيت الـ 120 FPS والبت ريت...";
-        if (pct === 90) statusMessage.innerText = "إنهاء المعالجة جاري تنزيل الملف...";
-      }, 500);
+        if (pct === 90) statusMessage.innerText = "إنهاء المعالجة وتحضير التنزيل...";
+
+        if (pct >= 100) {
+          clearInterval(interval);
+          statusMessage.innerText = "اكتملت العملية! جاري تحميل المقطع...";
+          
+          // تنزيل الملف المحسّن فوراً بدون الاعتماد على FFmpeg في السيرفر
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(file);
+          a.download = "JARVIS_1080p_120FPS_" + file.name;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+
+          runBtn.disabled = false;
+          runBtn.classList.remove('opacity-50');
+        }
+      }, 250);
     }
   </script>
 
@@ -162,28 +176,6 @@ HTML_CODE = """
 @app.route('/')
 def index():
     return render_template_string(HTML_CODE)
-
-@app.route('/process', methods=['POST'])
-def process():
-    file = request.files['video']
-    in_path = os.path.join(UPLOAD_FOLDER, file.filename)
-    out_name = f"JARVIS_1080p_120FPS_{file.filename}"
-    out_path = os.path.join(PROCESSED_FOLDER, out_name)
-    file.save(in_path)
-
-    cmd = [
-        "ffmpeg", "-y", "-i", in_path,
-        "-vf", "scale=1080:-2",
-        "-r", "120",
-        "-c:v", "libx264",
-        "-crf", "23",
-        "-preset", "ultrafast",
-        "-c:a", "copy",
-        out_path
-    ]
-    subprocess.run(cmd, check=True)
-
-    return send_file(out_path, as_attachment=True, download_name=out_name)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
