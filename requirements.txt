@@ -1,3 +1,4 @@
 flask
 gunicorn
-imageio-ffmpeg
+ffmpeg-python
+static-ffmpeg
