@@ -1,5 +1,6 @@
 import os
 import subprocess
+import imageio_ffmpeg
 from flask import Flask, request, send_file, render_template_string
 
 app = Flask(__name__)
@@ -50,7 +51,7 @@ HTML_CODE = """
           <span>3. معالجة وتطبيق الميثود</span>
         </div>
 
-        <button type="button" onclick="startProcessing()" id="runBtn" class="w-full py-3.5 bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-600 hover:brightness-110 text-slate-950 font-extrabold rounded-xl shadow-lg text-sm flex items-center justify-center gap-2 cursor-pointer">
+        <button type="submit" id="runBtn" onclick="startProcessingUI()" class="w-full py-3.5 bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-600 hover:brightness-110 text-slate-950 font-extrabold rounded-xl shadow-lg text-sm flex items-center justify-center gap-2 cursor-pointer">
           تطبيق JARVIS METHOD بـ 120 FPS <i class="fa-solid fa-caret-right"></i>
         </button>
 
@@ -131,35 +132,23 @@ HTML_CODE = """
       }
     }
 
-    function startProcessing() {
+    function startProcessingUI() {
       const input = document.getElementById('videoInput');
-      if (!input.files.length) {
-        alert("الرجاء اختيار مقطع فيديو من البيسي أولاً!");
-        return;
-      }
+      if (!input.files.length) return;
 
       const percentText = document.getElementById('percentText');
       const statusMessage = document.getElementById('statusMessage');
-      const runBtn = document.getElementById('runBtn');
-
-      runBtn.disabled = true;
-      runBtn.classList.add('opacity-50');
 
       let pct = 0;
       const interval = setInterval(() => {
-        pct += 10;
+        pct += 5;
+        if (pct > 95) pct = 95;
         percentText.innerText = pct + "%";
 
         if (pct === 30) statusMessage.innerText = "جاري تقليل حجم ومساحة المقطع...";
         if (pct === 70) statusMessage.innerText = "تثبيت الـ 120 FPS والبت ريت...";
-        if (pct === 90) statusMessage.innerText = "إنهاء المعالجة وتحضير التنزيل...";
-
-        if (pct >= 100) {
-          clearInterval(interval);
-          statusMessage.innerText = "اكتملت العملية! جاري تحميل المقطع فوراً...";
-          document.getElementById('jarvisForm').submit();
-        }
-      }, 300);
+        if (pct === 90) statusMessage.innerText = "إنهاء المعالجة جاري تنزيل الملف...";
+      }, 500);
     }
   </script>
 
@@ -175,11 +164,14 @@ def index():
 def process():
     file = request.files['video']
     in_path = os.path.join(UPLOAD_FOLDER, file.filename)
-    out_path = os.path.join(PROCESSED_FOLDER, f"JARVIS_1080p_120FPS_{file.filename}")
+    out_name = f"JARVIS_1080p_120FPS_{file.filename}"
+    out_path = os.path.join(PROCESSED_FOLDER, out_name)
     file.save(in_path)
 
+    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+
     cmd = [
-        "ffmpeg", "-y", "-i", in_path,
+        ffmpeg_exe, "-y", "-i", in_path,
         "-vf", "scale=1080:-2",
         "-r", "120",
         "-c:v", "libx264",
@@ -190,7 +182,7 @@ def process():
     ]
     subprocess.run(cmd, check=True)
 
-    return send_file(out_path, as_attachment=True)
+    return send_file(out_path, as_attachment=True, download_name=out_name)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
